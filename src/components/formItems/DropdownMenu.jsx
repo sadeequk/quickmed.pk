@@ -1,0 +1,63 @@
+/** @format */
+
+import React from "react";
+import { Link } from "react-router-dom";
+import { DropdownIcon } from "../../assets/svg";
+
+const DropdownMenu = ({
+  link,
+  idx,
+  openDropdown,
+  setOpenDropdown,
+  isMobile,
+  onLinkClick,
+}) => {
+  const isOpen = openDropdown === idx;
+  const handleRoute = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    onLinkClick?.();
+  };
+
+  const toggleMobileDropdown = () => setOpenDropdown(isOpen ? null : idx);
+
+  return (
+    <div
+      className={`relative ${isMobile ? "mb-2" : "group"}`}
+      onMouseEnter={!isMobile ? () => setOpenDropdown(idx) : undefined}
+      onMouseLeave={!isMobile ? () => setOpenDropdown(null) : undefined}>
+      <button
+        onClick={isMobile ? toggleMobileDropdown : undefined}
+        className='flex items-center w-full px-3 py-2 xl:text-[15px] text-[14px] font-medium text-[#014e78] bg-white hover:bg-[#014e78] hover:text-white rounded transition-colors duration-150'>
+        <span>{link.label}</span>
+        <DropdownIcon />
+      </button>
+
+      <div
+        className={`${
+          isMobile
+            ? isOpen
+              ? "block"
+              : "hidden"
+            : isOpen
+            ? "absolute left-0 w-64 min-w-fit z-20"
+            : "hidden"
+        } bg-[#f9f9f9] mt-1 shadow-lg rounded transition-all duration-200 ${
+          link.label === "Find Doctors" ? "max-h-96 overflow-y-auto" : ""
+        }`}>
+        {link.dropdown.map((item, i) => (
+          <Link
+            key={item.label}
+            to={item.href}
+            onClick={handleRoute}
+            className={`block px-4 py-2.5 text-[#014e78] hover:bg-[#f1f1f1] font-medium whitespace-nowrap ${
+              link.label === "Find Doctors" ? "text-sm" : "text-[15px]"
+            } ${i === 0 ? "border-b border-gray-200" : ""}`}>
+            {item.label}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default DropdownMenu;

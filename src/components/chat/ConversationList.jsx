@@ -1,0 +1,252 @@
+/** @format */
+import React from "react";
+import { Card, CardContent } from "../ui/card";
+import { Input } from "../ui/input";
+import { Skeleton } from "../ui";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
+import { Search, MessageCircle } from "lucide-react";
+import { formatDate } from "../../helpers/date.helper";
+
+const ConversationList = ({
+  allDoctors,
+  allUsers = [],
+  threads,
+  threadsLoading = false,
+  searchQuery,
+  setSearchQuery,
+  selectedDoctor,
+  onDoctorSelect,
+  onThreadSelect,
+  currentThread,
+  user,
+  isDoctorRoute,
+  isUserRoute,
+}) => {
+  // Filter doctors based on search query
+  const filteredDoctors = allDoctors.filter(
+    (doctor) =>
+      doctor.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      doctor.specialty?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Get all participants except current user
+  const getThreadParticipants = (thread) =>
+    (thread.participants || []).filter((p) => p.userId !== user?._id);
+
+  // Return either a matched doctor object from allDoctors OR a fallback participant object
+  const getDoctorFromThread = (thread) => {
+    const participants = getThreadParticipants(thread);
+    const participant = participants[0]; // if group thread, this picks first other participant
+    const participantId = participant?.userId;
+
+    // try to find a doctor record
+    const doctor = allDoctors.find((d) => d._id === participantId);
+    if (doctor)
+      return {
+        ...doctor,
+        isDoctor: true,
+      };
+
+    const userMatch = allUsers.find((u) => u._id === participantId);
+    if (userMatch) {
+      return {
+        _id: userMatch._id,
+        name: userMatch.name,
+        profileImage: userMatch.profileImage || userMatch.avatar || null,
+        specialty: "",
+        isDoctor: false,
+      };
+    }
+
+    // fallback: build a lightweight object from participant/thread data so we can still render UI
+    const fallbackName =
+      participant?.name ||
+      participant?.displayName ||
+      thread?.name ||
+      "Unknown";
+    const fallbackAvatar =
+      participant?.avatar ||
+      participant?.profileImage ||
+      thread?.avatar ||
+      null;
+
+    return {
+      _id: participantId || thread._id,
+      name: fallbackName,
+      profileImage: fallbackAvatar,
+      specialty: participant?.role || thread?.subtitle || "",
+      isDoctor: false,
+    };
+  };
+
+  // helper to show last message preview (if available)
+  const getLastMessagePreview = (thread) =>
+    thread.lastMessage?.text ||
+    thread.lastMessage?.content ||
+    thread.lastMessage?.preview ||
+    thread.preview ||
+    "";
+
+  return (
+    <div className='w-full h-full flex flex-col bg-white'>
+      {/* Header */}
+      <div className='p-4 border-b bg-green-600 text-white'>
+        <h2 className='text-lg font-semibold'>Chats</h2>
+      </div>
+
+      {/* Search Bar */}
+      <div className='p-3 border-b'>
+        <div className='relative'>
+          <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4' />
+          <Input
+            placeholder='Search doctors...'
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className='pl-10 bg-gray-50 border-0 focus:bg-white'
+          />
+        </div>
+      </div>
+
+      {/* Threads Skeleton */}
+      {threadsLoading && (
+        <div className='flex-1 overflow-y-auto p-3 space-y-3'>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className='flex items-center gap-3'>
+              <Skeleton className='h-12 w-12 rounded-full' />
+              <div className='flex-1 space-y-2'>
+                <Skeleton className='h-4 w-2/3' />
+                <Skeleton className='h-3 w-1/2' />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Existing Threads */}
+      {!threadsLoading && threads.length > 0 && (
+        <div className='flex-1 overflow-y-auto'>
+          <div className='p-3 border-b bg-gray-50'>
+            <h3 className='text-sm font-medium text-gray-600'>Recent Chats</h3>
+          </div>
+
+          {[...threads]
+            .sort((a, b) => {
+              const aTime = new Date(
+                a?.updatedAt || a?.lastMessage?.createdAt || 0
+              ).getTime();
+              const bTime = new Date(
+                b?.updatedAt || b?.lastMessage?.createdAt || 0
+              ).getTime();
+              return bTime - aTime; // newest first
+            })
+            .map((thread) => {
+              const doctorOrParticipant = getDoctorFromThread(thread);
+
+              // optional: allow filtering threads by searchQuery (search by participant name or specialty)
+              const matchesSearch =
+                !searchQuery ||
+                doctorOrParticipant?.name
+                  ?.toLowerCase()
+                  .includes(searchQuery.toLowerCase()) ||
+                doctorOrParticipant?.specialty
+                  ?.toLowerCase()
+                  .includes(searchQuery.toLowerCase());
+
+              if (!matchesSearch) return null;
+
+              return (
+                <div
+                  key={thread._id}
+                  onClick={() => onThreadSelect(thread, doctorOrParticipant)}
+                  className={`p-3 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
+                    currentThread === thread._id
+                      ? "bg-green-50 border-l-4 border-l-green-500"
+                      : ""
+                  }`}>
+                  <div className='flex items-center space-x-3'>
+                    <Avatar className='h-12 w-12'>
+                      {doctorOrParticipant.profileImage ? (
+                        <AvatarImage src={doctorOrParticipant.profileImage} />
+                      ) : (
+                        <AvatarFallback className='bg-green-100 text-green-600'>
+                          {doctorOrParticipant.name?.charAt(0)}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+
+                    <div className='flex-1 min-w-0'>
+                      <div className='flex items-center justify-between'>
+                        <h4 className='font-medium text-gray-900 truncate'>
+                          {doctorOrParticipant.isDoctor
+                            ? `Dr ${doctorOrParticipant.name}`
+                            : doctorOrParticipant.name}
+                        </h4>
+                        <span className='text-xs text-gray-500'>
+                          {formatDate(thread.updatedAt)}
+                        </span>
+                      </div>
+
+                      <p className='text-sm text-gray-500 truncate'>
+                        {getLastMessagePreview(thread) ||
+                          doctorOrParticipant.specialty}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      )}
+
+      {/* Available Doctors */}
+      {!threadsLoading && searchQuery && (
+        <div className='flex-1 overflow-y-auto'>
+          <div className='p-3 border-b bg-gray-50'>
+            <h3 className='text-sm font-medium text-gray-600'>
+              Available Doctors
+            </h3>
+          </div>
+          {filteredDoctors.slice(0, 3).map((doctor) => (
+            <div
+              key={doctor._id}
+              onClick={() => onDoctorSelect(doctor)}
+              className={`p-3 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
+                selectedDoctor?._id === doctor._id
+                  ? "bg-green-50 border-l-4 border-l-green-500"
+                  : ""
+              }`}>
+              <div className='flex items-center space-x-3'>
+                <Avatar className='h-12 w-12'>
+                  <AvatarImage src={doctor.profileImage} />
+                  <AvatarFallback className='bg-green-100 text-green-600'>
+                    {doctor.name?.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className='flex-1 min-w-0'>
+                  <h4 className='font-medium text-gray-900 truncate'>
+                    {`Dr ${doctor.name}`}
+                  </h4>
+                  <p className='text-sm text-gray-500 truncate'>
+                    {doctor.specialty}
+                  </p>
+                </div>
+                <MessageCircle className='h-5 w-5 text-green-500' />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* No search results */}
+      {searchQuery && filteredDoctors.length === 0 && (
+        <div className='flex-1 flex items-center justify-center text-gray-500'>
+          <p>No doctors found</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ConversationList;

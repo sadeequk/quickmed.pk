@@ -1,0 +1,691 @@
+/** @format */
+
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useDoctor } from "../context";
+import { useAppointments } from "../context";
+import { toast } from "sonner";
+import { InputField } from "../components/formItems";
+import { Modal } from "../modals";
+import { AppointmentCard } from "../components/cards";
+
+const CurrentDoctorProfile = () => {
+  const {
+    doctor,
+    logout,
+    DoctorProfileUpdate,
+    UpdateProfilePic,
+    pendingValidation,
+  } = useDoctor();
+  const [isEditing, setIsEditing] = useState(false);
+  const [imagePreview, setImagePreview] = useState("");
+  const [isMoreModalVisible, setIsMoreModalVisible] = useState(false);
+  const [consultationCode, setConsultationCode] = useState("");
+  const [pendingConsultations, setPendingConsultations] = useState([]);
+  const [scheduleForm, setScheduleForm] = useState({
+    workingDays: [],
+    startTime: "09:00",
+    endTime: "17:00",
+    appointmentDuration: 30,
+  });
+
+  const [profileData, setProfileData] = useState({
+    phone: doctor?.phone || "",
+    availability: true,
+    fee: doctor?.fee || "",
+    fullAddress: doctor?.fullAddress || "",
+    experience: doctor?.experience || "",
+  });
+  const navigate = useNavigate();
+  const {
+    doctorsAppointments,
+    loading: apptLoading,
+    doctorAppointments,
+    appointmentStatus,
+    doctorAppointmentsCancel,
+    getSchedule,
+    doctorAppointmentsSchedule,
+  } = useAppointments();
+
+  useEffect(() => {
+    const checkPendingConsultations = () => {
+      const mockConsultations = [
+        {
+          patientName: "John Doe",
+          date: new Date(),
+          meetingId: "meeting_1754952068034_88yzffp2o",
+          patientId: "patient_001",
+          symptoms: "Fever and headache",
+        },
+      ];
+      setPendingConsultations(mockConsultations);
+    };
+
+    checkPendingConsultations();
+    // Check every 30 seconds for new consultations
+    const interval = setInterval(checkPendingConsultations, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Load doctor appointments and current schedule
+  useEffect(() => {
+    doctorAppointments().catch(() => {});
+    if (doctor?._id) {
+      getSchedule(doctor._id)
+        .then((s) => {
+          if (!s) return;
+          setScheduleForm({
+            workingDays: s.workingDays || [],
+            startTime: s.startTime || "09:00",
+            endTime: s.endTime || "17:00",
+            appointmentDuration: s.appointmentDuration || 30,
+          });
+        })
+        .catch(() => {});
+    }
+  }, [doctor?._id]);
+
+  // Handle consultation joining
+  const handleJoinConsultation = () => {
+    if (!consultationCode.trim()) {
+      toast.error("Please enter a consultation code");
+      return;
+    }
+    navigate(`/doctor/consultation/${consultationCode}/patient_waiting`);
+  };
+
+  // Handle Confirm Appointments
+  const handleConfirmAppointment = (appointmentsId) => {
+    appointmentStatus(appointmentsId);
+  };
+
+  // Handle form submission
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    DoctorProfileUpdate(profileData);
+  };
+
+  const handleProfileImageUpload = (event) => {
+    const file = event.target.files[0];
+    // setProfileImage(file);
+    if (file) {
+      const previewUrl = URL.createObjectURL(file);
+      setImagePreview(previewUrl);
+      const formData = new FormData();
+      formData.append("image", file); // profile image
+      UpdateProfilePic(formData);
+    }
+  };
+
+  const handleLogout = () => {
+    logout(navigate);
+  };
+
+  const toggleWorkingDay = (day) => {
+    setScheduleForm((prev) => {
+      const has = prev.workingDays?.includes(day);
+      const workingDays = has
+        ? prev.workingDays.filter((d) => d !== day)
+        : [...(prev.workingDays || []), day];
+      return { ...prev, workingDays };
+    });
+  };
+
+  const handleSaveSchedule = async (e) => {
+    e?.preventDefault?.();
+    const mapDay = (abbr) => {
+      switch (abbr) {
+        case "Mon":
+          return "monday";
+        case "Tue":
+          return "tuesday";
+        case "Wed":
+          return "wednesday";
+        case "Thu":
+          return "thursday";
+        case "Fri":
+          return "friday";
+        case "Sat":
+          return "saturday";
+        case "Sun":
+          return "sunday";
+        default:
+          return null;
+      }
+    };
+
+    const selectedSet = new Set(scheduleForm.workingDays || []);
+    const payload = {
+      workingDays: {
+        monday: selectedSet.has("Mon"),
+        tuesday: selectedSet.has("Tue"),
+        wednesday: selectedSet.has("Wed"),
+        thursday: selectedSet.has("Thu"),
+        friday: selectedSet.has("Fri"),
+        saturday: selectedSet.has("Sat"),
+        sunday: selectedSet.has("Sun"),
+      },
+      startTime: scheduleForm.startTime,
+      endTime: scheduleForm.endTime,
+      appointmentDuration: Number(scheduleForm.appointmentDuration) || 30,
+    };
+
+    await doctorAppointmentsSchedule(payload);
+    if (doctor?._id) await getSchedule(doctor._id);
+  };
+
+  // unified time formatting handled via AppointmentCard where rendered
+
+  if (!doctor && !pendingValidation) {
+    return (
+      <div className='min-h-[60vh] flex items-center justify-center bg-emerald-50'>
+        <h2 className='text-2xl text-emerald-700 font-semibold'>
+          No doctor found.
+        </h2>
+      </div>
+    );
+  }
+
+  // Check if doctor status is pending
+  if (pendingValidation) {
+    return (
+      <div className='min-h-[60vh] flex items-center justify-center bg-emerald-50 p-4'>
+        <div className='bg-white rounded-xl shadow-md p-8 max-w-2xl w-full text-center'>
+          <div className='mb-6'>
+            <div className='w-20 h-20 mx-auto bg-yellow-100 rounded-full flex items-center justify-center mb-4'>
+              <svg
+                className='w-10 h-10 text-yellow-600'
+                fill='none'
+                stroke='currentColor'
+                viewBox='0 0 24 24'>
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  strokeWidth={2}
+                  d='M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'
+                />
+              </svg>
+            </div>
+            <h2 className='text-3xl font-bold text-yellow-700 mb-4'>
+              Application Pending
+            </h2>
+            <p className='text-lg text-gray-600 mb-6'>
+              Your account is pending verification. We will notify you via email
+              once verified.
+            </p>
+            <div className='bg-yellow-50 border border-yellow-200 rounded-lg p-4'>
+              <p className='text-sm text-yellow-800'>
+                <strong>Current Status:</strong> Pending Verification
+              </p>
+              <p className='text-sm text-yellow-800 mt-1'>
+                <strong>Name:</strong> {doctor?.name}
+              </p>
+              <p className='text-sm text-yellow-800 mt-1'>
+                <strong>Speciality:</strong>{" "}
+                {doctor?.speciality?.join(", ") || "Not specified"}
+              </p>
+              <button
+                onClick={handleLogout}
+                className='bg-red-600 text-white mt-4 px-4 py-2 rounded-lg hover:bg-red-700'>
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className='min-h-[60vh] bg-emerald-50 py-16 px-4 flex justify-center'>
+      <div className='bg-white rounded-xl shadow-md p-8 max-w-2xl w-full'>
+        <div className='mb-6'>
+          <div className='flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4'>
+            <h1 className='text-3xl font-bold text-emerald-800'>
+              Doctor Profile
+            </h1>
+
+            {/* Top Row Buttons */}
+            <div className='flex flex-wrap gap-2 justify-center sm:justify-end'>
+              {pendingConsultations.length > 0 && (
+                <div className='relative'>
+                  <button
+                    onClick={() => {
+                      document
+                        .querySelector("[data-consultation-section]")
+                        ?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className='bg-red-100 text-red-700 px-4 py-2 rounded-lg hover:bg-red-200 transition-colors relative font-medium'>
+                    <span>Pending Consultations</span>
+                    <span className='absolute -top-2 -right-2 bg-red-600 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center font-bold'>
+                      {pendingConsultations.length}
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              <button
+                onClick={() => setIsEditing(!isEditing)}
+                className='bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors font-medium'>
+                {isEditing ? "Cancel" : "Edit"}
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom Row Buttons */}
+          <div className='flex flex-wrap gap-2 justify-center sm:justify-end'>
+            <button
+              onClick={() => navigate("/change-password?type=doctor")}
+              className='bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium'>
+              Change Password
+            </button>
+            <button
+              onClick={handleLogout}
+              className='bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors font-medium'>
+              Logout
+            </button>
+          </div>
+        </div>
+
+        {isEditing ? (
+          <form
+            onSubmit={handleUpdate}
+            className='space-y-6'>
+            <div className='flex flex-col items-center mb-6'>
+              <div className='relative'>
+                <img
+                  src={imagePreview || doctor.profilePicture}
+                  alt={doctor.name}
+                  className='w-28 h-28 rounded-full object-cover mb-4 border-4 border-emerald-100'
+                />
+                <label className='absolute bottom-4 right-0 bg-emerald-600 text-white p-2 rounded-full cursor-pointer hover:bg-emerald-700'>
+                  <svg
+                    className='w-4 h-4'
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'>
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z'
+                    />
+                  </svg>
+                  <input
+                    type='file'
+                    accept='image/*'
+                    onChange={handleProfileImageUpload}
+                    className='hidden'
+                  />
+                </label>
+              </div>
+              <h2 className='text-xl font-bold text-emerald-800'>
+                {doctor.name}
+              </h2>
+              <p className='text-sm text-emerald-700'>
+                {doctor.speciality?.join(", ") || doctor.specialty}
+              </p>
+            </div>
+
+            <InputField
+              label='Phone Number'
+              name='phone'
+              type='tel'
+              value={profileData.phone}
+              onChange={(e) =>
+                setProfileData((prev) => ({ ...prev, phone: e.target.value }))
+              }
+              placeholder='Enter phone number'
+            />
+
+            <InputField
+              label='Consultation Fee (Rs.)'
+              name='fee'
+              type='text'
+              value={profileData.fee}
+              onChange={(e) =>
+                setProfileData((prev) => ({ ...prev, fee: e.target.value }))
+              }
+              placeholder='Enter consultation fee'
+            />
+
+            <InputField
+              label='Experience'
+              name='experience'
+              type='text'
+              value={profileData.experience}
+              onChange={(e) =>
+                setProfileData((prev) => ({
+                  ...prev,
+                  experience: e.target.value,
+                }))
+              }
+              placeholder='Enter years of experience'
+            />
+
+            <InputField
+              label='Full Address'
+              name='fullAddress'
+              type='text'
+              value={profileData.fullAddress}
+              onChange={(e) =>
+                setProfileData((prev) => ({
+                  ...prev,
+                  fullAddress: e.target.value,
+                }))
+              }
+              placeholder='Enter full address'
+            />
+            <div className='flex justify-between'>
+              <button
+                type='button'
+                className='bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700'
+                onClick={() => setIsMoreModalVisible(true)}>
+                Update More Details
+              </button>
+              <button
+                type='submit'
+                className='bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700'>
+                Save Changes
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div>
+            <div className='flex flex-col items-center mb-6'>
+              <img
+                src={doctor.profilePicture}
+                alt={doctor.name}
+                className='w-28 h-28 rounded-full object-cover mb-2 border-4 border-emerald-100'
+              />
+              <h2 className='text-xl font-bold text-emerald-800'>
+                {doctor.name}
+              </h2>
+              <p className='text-sm text-emerald-700'>
+                {doctor.speciality?.join(", ") || doctor.specialty}
+              </p>
+            </div>
+
+            <div className='space-y-3'>
+              <p className='text-gray-700 mb-1'>
+                <b>Experience:</b> {doctor.experience} years
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Hospital:</b> {doctor.hospital}
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Location:</b> {doctor.fullAddress}
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Rating:</b> ⭐ {doctor?.rating?.average || 0} (
+                {doctor?.rating?.count || 0} reviews)
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Fee:</b> Rs. {doctor.fee || "Not set"}
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Availability:</b>{" "}
+                <span
+                  className={`px-2 py-1 rounded text-xs ${
+                    doctor.availability
+                      ? "bg-green-100 text-green-800"
+                      : "bg-red-100 text-red-800"
+                  }`}>
+                  {doctor.availability ? "Available" : "Not Available"}
+                </span>
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>PMDC Number:</b> {doctor.pmdcNumber}
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Main Degree:</b> {doctor.mainDegree}
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Status:</b>{" "}
+                <span
+                  className={`px-2 py-1 rounded text-xs ${
+                    doctor.status === "verified"
+                      ? "bg-green-100 text-green-800"
+                      : "bg-yellow-100 text-yellow-800"
+                  }`}>
+                  {doctor.status}
+                </span>
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Documents Uploaded:</b>{" "}
+                <span
+                  className={`px-2 py-1 rounded text-xs ${
+                    doctor.hasDocuments
+                      ? "bg-green-100 text-green-800"
+                      : "bg-red-100 text-red-800"
+                  }`}>
+                  {doctor.hasDocuments ? "Yes" : "No"}
+                </span>
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Hospital Verified:</b>{" "}
+                <span
+                  className={`px-2 py-1 rounded text-xs ${
+                    doctor.hospitalVerified
+                      ? "bg-green-100 text-green-800"
+                      : "bg-yellow-100 text-yellow-800"
+                  }`}>
+                  {doctor.hospitalVerified ? "Yes" : "No"}
+                </span>
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>PMDC Verified:</b>{" "}
+                <span
+                  className={`px-2 py-1 rounded text-xs ${
+                    doctor.pmdcVerified
+                      ? "bg-green-100 text-green-800"
+                      : "bg-yellow-100 text-yellow-800"
+                  }`}>
+                  {doctor.pmdcVerified ? "Yes" : "No"}
+                </span>
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Member of Registered Hospital:</b>{" "}
+                <span
+                  className={`px-2 py-1 rounded text-xs ${
+                    doctor.memberofRegisterdHospital
+                      ? "bg-green-100 text-green-800"
+                      : "bg-yellow-100 text-yellow-800"
+                  }`}>
+                  {doctor.memberofRegisterdHospital ? "Yes" : "No"}
+                </span>
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>CNIC:</b> {doctor.cnic}
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Phone:</b> {doctor.phone}
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Email:</b> {doctor.email}
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Gender:</b> {doctor.gender}
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Religion:</b> {doctor.religion}
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Payment Completed:</b>{" "}
+                {doctor.PaymentCompleted
+                  ? new Date(doctor.PaymentCompleted).toLocaleDateString()
+                  : ""}
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Created:</b>{" "}
+                {doctor.createdAt
+                  ? new Date(doctor.createdAt).toLocaleDateString()
+                  : ""}
+              </p>
+              <p className='text-gray-700 mb-1'>
+                <b>Last Updated:</b>{" "}
+                {doctor.updatedAt
+                  ? new Date(doctor.updatedAt).toLocaleDateString()
+                  : ""}
+              </p>
+            </div>
+
+            {/* Consultation Joining Section */}
+            <div
+              className='mt-8 border-t pt-6'
+              data-consultation-section>
+              <h3 className='text-lg font-semibold text-emerald-800 mb-4'>
+                Video Consultation Management
+              </h3>
+
+              {/* Quick Start New Consultation */}
+              <div className='mb-6 bg-green-50 border border-green-200 rounded-lg p-4'>
+                <h4 className='font-semibold text-green-800 mb-3'>
+                  🚀 Start New Consultation
+                </h4>
+                <p className='text-green-700 text-sm mb-3'>
+                  Create a new video consultation room for patients to join.
+                </p>
+                <button
+                  onClick={() => {
+                    // Navigate to create new consultation
+                    navigate("/doctor/consultation/new/new_patient");
+                  }}
+                  className='bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium'>
+                  Start New Consultation
+                </button>
+              </div>
+            </div>
+
+            {/* Appointments Management */}
+            <div className='mt-8 border-t pt-6'>
+              <h3 className='text-lg font-semibold text-emerald-800 mb-4'>
+                Appointments
+              </h3>
+              <div className='bg-gray-50 border border-gray-200 rounded-lg p-4'>
+                {apptLoading?.doctorAppointments ? (
+                  <div className='text-gray-600 text-sm'>
+                    Loading appointments...
+                  </div>
+                ) : doctorsAppointments?.length ? (
+                  <div className='space-y-3'>
+                    {doctorsAppointments.map((a) => (
+                      <AppointmentCard
+                        key={a._id}
+                        appointment={a}
+                        role='doctor'
+                        showConfirm={a.status !== "confirmed"}
+                        showCancel={a.status !== "cancelled"}
+                        onConfirm={() => handleConfirmAppointment(a._id)}
+                        onCancel={() => doctorAppointmentsCancel(a._id)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className='text-gray-600 text-sm'>
+                    No appointments yet.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Schedule Editor */}
+            <div className='mt-8 border-t pt-6'>
+              <h3 className='text-lg font-semibold text-emerald-800 mb-4'>
+                Weekly Schedule
+              </h3>
+              <form
+                onSubmit={handleSaveSchedule}
+                className='space-y-3'>
+                <div className='grid grid-cols-2 sm:grid-cols-3 gap-2'>
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                    (d) => (
+                      <label
+                        key={d}
+                        className='flex items-center gap-2 text-sm'>
+                        <input
+                          type='checkbox'
+                          checked={scheduleForm.workingDays?.includes(d)}
+                          onChange={() => toggleWorkingDay(d)}
+                        />
+                        <span>{d}</span>
+                      </label>
+                    )
+                  )}
+                </div>
+                <div className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
+                  <div>
+                    <label className='block text-xs text-gray-600 mb-1'>
+                      Start Time
+                    </label>
+                    <input
+                      type='time'
+                      value={scheduleForm.startTime}
+                      onChange={(e) =>
+                        setScheduleForm((p) => ({
+                          ...p,
+                          startTime: e.target.value,
+                        }))
+                      }
+                      className='w-full border rounded px-2 py-1'
+                    />
+                  </div>
+                  <div>
+                    <label className='block text-xs text-gray-600 mb-1'>
+                      End Time
+                    </label>
+                    <input
+                      type='time'
+                      value={scheduleForm.endTime}
+                      onChange={(e) =>
+                        setScheduleForm((p) => ({
+                          ...p,
+                          endTime: e.target.value,
+                        }))
+                      }
+                      className='w-full border rounded px-2 py-1'
+                    />
+                  </div>
+                  <div>
+                    <label className='block text-xs text-gray-600 mb-1'>
+                      Duration (minutes)
+                    </label>
+                    <input
+                      type='number'
+                      min='5'
+                      step='5'
+                      value={scheduleForm.appointmentDuration}
+                      onChange={(e) =>
+                        setScheduleForm((p) => ({
+                          ...p,
+                          appointmentDuration: Number(e.target.value) || 30,
+                        }))
+                      }
+                      className='w-full border rounded px-2 py-1'
+                    />
+                  </div>
+                </div>
+                <div className='flex justify-end'>
+                  <button
+                    type='submit'
+                    className='bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700'>
+                    Save Schedule
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+      <Modal
+        open={isMoreModalVisible}
+        onOpenChange={setIsMoreModalVisible}
+        title='Need to Update More Details?'
+        description="We're here to help! For additional profile updates, please reach out to our support team. You can contact us directly at +92 348 8597922 or connect with our admin team for personalized assistance."
+      />
+    </div>
+  );
+};
+
+export default CurrentDoctorProfile;

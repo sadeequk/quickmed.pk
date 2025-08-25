@@ -1,0 +1,26 @@
+/** @format */
+
+import { doctorApi } from "../api";
+
+export const doctorService = {
+  validateToken: () => doctorApi.validateToken(),
+
+  signUp: (formData) => doctorApi.signUp(formData),
+
+  login: (credentials) => doctorApi.login(credentials),
+
+  forgotPassword: (data) => doctorApi.forgotPassword(data),
+
+  resetPassword: (data) => doctorApi.resetPassword(data),
+
+  changePassword: (data) => doctorApi.changePassword(data),
+
+  updateProfile: (formData) => doctorApi.updateProfile(formData),
+
+  uploadDocuments: (formData) => doctorApi.uploadDocuments(formData),
+
+  updateDoctorProfile: (formData) => doctorApi.updateDoctorProfile(formData),
+  getAllPublicDoctors: () => doctorApi.getAllPublicDoctors(),
+
+  recommendationsApiSearch: (prompt) => doctorApi.recommendationsApiSearch(),
+};
